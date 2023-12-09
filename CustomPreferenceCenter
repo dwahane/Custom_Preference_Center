@@ -1,0 +1,510 @@
+
+%%[
+/* Retrieve Subscriber Key from the context */
+SET @subscriberKey = AttributeValue("_subscriberkey")
+
+/* Initialize variables to store retrieved data */
+SET @FirstName = ""
+SET @LastName = ""
+SET @EmailAddress = ""
+SET @ProductInformation = ""
+SET @Announcements = ""
+SET @Marketing = ""
+SET @UnsubscribeAll = ""
+set @Updated_date = ""
+
+/* Check if Subscriber Key is not empty */
+IF NOT EMPTY(@subscriberKey) THEN
+
+    /* Retrieve data from DE based on Subscriber Key */
+    SET @subscriberRows = LookupRows('Custom_Preference_Master', 'SubscriberKey', @subscriberKey)
+
+    /* Check if rows are found in the DE */
+    IF RowCount(@subscriberRows) > 0 THEN
+        SET @row = Row(@subscriberRows, 1)
+        SET @FirstName = Field(@row, 'FirstName')
+        SET @LastName = Field(@row, 'LastName')
+        SET @EmailAddress = Field(@row, 'EmailAddress')
+        SET @ProductInformation = Field(@row, 'ProductInformation')
+        SET @Announcements = Field(@row, 'Announcements')
+        SET @Marketing = Field(@row, 'Marketing')
+        SET @UnsubscribeAll = Field(@row, 'UnsubscribeAll')
+        set @Updated_date = Now()
+    ENDIF
+ENDIF
+
+IF RequestParameter("submitted") == true AND RequestParameter("unsub") == true THEN
+
+
+SET @updateCount = UpdateData(
+        'Custom_Preference_Master',
+        1,
+        'SubscriberKey', @subscriberKey,
+        
+        'FirstName', @FirstName,
+        'LastName', @LastName,
+        'EmailAddress', @EmailAddress,
+        
+        'Marketing', 'False',
+        'ProductInformation', 'False',
+        'UnsubscribeAll', 'True',
+        'Announcements', 'False',
+        'Updated_date',@Updated_date
+    )
+    SET @reason = "Unsubscribed through custom subscription center"
+   
+  SET @lue = CreateObject("ExecuteRequest")
+  SETObjectProperty(@lue,"Name","LogUnsubEvent")
+
+  SET @lue_prop = CreateObject("APIProperty")
+  SETObjectProperty(@lue_prop, "Name", "SubscriberKey")
+  SETObjectProperty(@lue_prop, "Value", @subscriberKey)
+  AddObjectArrayItem(@lue, "Parameters", @lue_prop)
+
+  SET @lue_prop = CreateObject("APIProperty")
+  SETObjectProperty(@lue_prop, "Name", "Reason")
+  SETObjectProperty(@lue_prop, "Value", @reason)
+  AddObjectArrayItem(@lue, "Parameters", @lue_prop)
+
+  SET @lue_statusCode = InvokeExecute(@lue, @overallStatus, @requestId)
+  
+ELSEIF RequestParameter("submitted") == true AND RequestParameter("sub") == true THEN
+SET @updateCount = UpdateData(
+        'Custom_Preference_Master',
+        1,
+        'SubscriberKey', @subscriberKey,
+        'FirstName', @FirstName,
+        'LastName', @LastName,
+        'EmailAddress', @EmailAddress,
+        'Marketing', 'True',
+        'ProductInformation', 'True',
+        'UnsubscribeAll', 'False',
+        'Announcements', 'True',
+        'Updated_date',@Updated_date
+    )
+    
+    /* set subscriber status to active in All Subscribers */  
+   SET @EmailAddress = RequestParameter("EmailAddress")
+   
+   SET @Subscriber = CreateObject("Subscriber")
+   SetObjectProperty(@Subscriber, "SubscriberKey", @SubscriberKey)
+   SetObjectProperty(@Subscriber, "EmailAddress", @EmailAddress)
+   SetObjectProperty(@Subscriber, "Status", "Active" )
+   SET @Status = InvokeUpdate(@Subscriber, @createErrDesc, @createErrNo, @createOpts)
+
+ SET @row = Row(@subscriberRows, 1)
+        SET @FirstName = Field(@row, 'FirstName')
+        SET @LastName = Field(@row, 'LastName')
+        SET @EmailAddress = Field(@row, 'EmailAddress')
+        SET @ProductInformation = Field(@row, 'ProductInformation')
+        SET @Announcements = Field(@row, 'Announcements')
+        SET @Marketing = Field(@row, 'Marketing')
+        SET @UnsubscribeAll = Field(@row, 'UnsubscribeAll')
+        set @Updated_date = Now()
+        
+ ELSEIF RequestParameter("submitted") == true THEN
+        
+    SET @submittedFirstName = RequestParameter("FirstName")
+    SET @submittedLastName = RequestParameter("LastName")
+    SET @submittedEmailAddress = RequestParameter("EmailAddress")
+    SET @submittedProductInformation = RequestParameter("ProductInformation")
+    SET @submittedAnnouncements = RequestParameter("Announcements")
+    SET @submittedMarketing = RequestParameter("Marketing")
+    SET @submittedUnsubscribeAll = RequestParameter("UnsubscribeAll")
+    
+     IF RequestParameter("EmailAddress") != AttributeValue("emailaddr") THEN
+   SET @EmailAddress = RequestParameter("EmailAddress")
+   SET @Subscriber = CreateObject("Subscriber")
+   SetObjectProperty(@Subscriber, "SubscriberKey", @SubscriberKey)
+   SetObjectProperty(@Subscriber, "EmailAddress", @EmailAddress)
+   SET @Status = InvokeUpdate(@Subscriber, @createErrDesc, @createErrNo, @createOpts) 
+   ENDIF
+   
+   SET @updateCount = UpdateData(
+        'Custom_Preference_Master',
+        1,
+        'SubscriberKey', @subscriberKey,
+        'FirstName', @submittedFirstName,
+        'LastName', @submittedLastName,
+        'EmailAddress', @submittedEmailAddress,
+        'Marketing', IIf(@submittedMarketing == 'true', 'false', 'true'),
+        'ProductInformation', IIf(@submittedProductInformation == 'true', 'false', 'true'),
+        'UnsubscribeAll', IIf(@UnsubscribeAll == 'true', 'true', 'false'),
+        'Announcements', IIf(@submittedAnnouncements == 'true', 'false', 'true'),
+         'Updated_date',@Updated_date
+    )
+    
+ENDIF
+
+IF @UnsubscribeAll == true THEN
+]%%
+
+
+<!-- HTML Form -->
+<title>Custom Preference Center</title>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+<style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+          width: 500px; 
+            margin: 0 auto; 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            text-align: left; 
+            font-size:15px;
+            font-family:Arial, Helvetica, sans-serif;
+         
+        }
+
+        h3 {
+            background-color: #D3D3D3;
+            padding: 5px;
+            margin: 0;
+            border-radius: 3px;
+        }
+
+        input[type="submit"] {
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #808080;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        @media only screen and (max-width: 500px) {
+    .container {
+        width: 90%; /* Adjust as needed */
+        box-sizing: border-box;
+        padding: 10px; /* Adjust padding as needed */
+        margin: 0 auto; /* Center the container */
+    }
+}
+    </style>
+<div class="container">
+<form action="%%=RequestParameter('PAGEURL')=%%" method="post">
+<div>
+  <h3 style="background-color: #D3D3D3; padding: 5px; margin: 0;  border-radius: 3px;">Resubscribe</h3><br>
+        You have unsubscribed from ALL publications from ABC Pvt Ltd. To resubscribe, please click the "Resubscribe" button below.
+         <input name="submitted" type="hidden" value="true"><br>
+         <input name="sub" type="hidden" value="true"><br><br>
+  <center><input type="submit" value="Resubscribe" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080 ; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;"></center><br><br>
+  Please refresh the page after you click the "Resubscribe" button. </div>
+  </form></div>
+
+%%[ELSEIF RequestParameter("submitted") == false AND NOT EMPTY(@SubscriberKey) AND RowCount(@subscriberRows) > 0 THEN]%%
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+          width: 500px; 
+            margin: 0 auto; 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            text-align: left; 
+            font-size:15px;
+            font-family:Arial, Helvetica, sans-serif;
+         
+        }
+
+        h3 {
+            background-color: #D3D3D3;
+            padding: 5px;
+            margin: 0;
+            border-radius: 3px;
+        }
+
+        input[type="submit"] {
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #808080;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+       @media only screen and (max-width: 500px) {
+    .container {
+        width: 90%; /* Adjust as needed */
+        box-sizing: border-box;
+        padding: 10px; /* Adjust padding as needed */
+        margin: 0 auto; /* Center the container */
+    }
+     form input[type="checkbox"] {
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 5px; /* Adjust the right margin as needed */
+        }
+
+        form label.checkbox-label {
+            display: inline-block;
+            vertical-align: middle;
+            margin-bottom: 0; /* Remove the bottom margin */
+        }
+}
+   
+   
+    </style>
+ <div class="container"><title>Custom Preference Center</title>
+<div>
+<h3 style="background-color: #D3D3D3; padding: 5px; margin: 0;  border-radius: 3px;">Update Your Profile:</h3><br>
+
+      <form action="%%=RequestParameter('PAGEURL')=%%" method="post">
+    
+         <label style="Padding-right:10px;">First Name: </label><input type="text" name="FirstName" value="%%=v(@FirstName)=%%" pattern="[A-Za-z]+" required="" style="Padding-bottom:5px; padding-right:50px;"> <span style="color: red;">*</span><br><br>
+         <label style="Padding-right:10px;">Last Name: </label><input type="text" name="LastName" value="%%=v(@LastName)=%%" pattern="[A-Za-z]+" required="" style="Padding-bottom:5px; padding-right:50px;"> <span style="color: red;">*</span><br><br>
+         <label style="Padding-right:45px;">Email: </label><input type="text" name="EmailAddress" value="%%=v(@EmailAddress)=%%" required="" readonly="" oncontextmenu="return false;" style="Padding-bottom:5px; padding-right:50px;"> <span style="color: red;">*</span> <br><br>
+       
+    
+       If you wish to unsubscribe from any of our publications, check the box and click on the 'Unsubscribe' button below.<br><br>
+        <input type="checkbox" name="Marketing" value="true" %%=IIf(@Marketing == 'false', 'checked', '')=%%>   <label>Marketing </label><br>
+     <input type="checkbox" name="ProductInformation" value="true" %%=IIf(@ProductInformation == 'false', 'checked', '')=%%> <label>Product Information </label><br>
+   <input type="checkbox" name="Announcements" value="true" %%=IIf(@Announcements == 'false', 'checked', '')=%%> <label>Announcements </label><br>
+ 
+   
+         <input name="submitted" type="hidden" value="true"><br>
+        <center>  <input type="submit" value="Unsubscribe" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;">
+        
+
+        </center></form></div></div>
+         <br><br>
+<div class="container">
+        
+      <h3 style="background-color: #D3D3D3; padding: 5px; margin: 0;  border-radius: 3px;">Unsubscribe From All:</h3>
+    <br>
+         <form action="%%=RequestParameter('PAGEURL')=%%" method="post" onsubmit="return validateUnsubscribe()">
+       If you wish to unsubscribe from ALL publications from  ABC Pvt Ltd., check the box and click the "Unsubscribe From All" button below.
+   <br><br>
+       
+    <input type="checkbox" name="unsubscribeCheckbox" id="unsubscribeCheckbox"> 
+    <label for="unsubscribeCheckbox">I understand and want to unsubscribe from all publications.</label><br>
+    <input name="submitted" type="hidden" value="true">  
+    <input name="unsub" type="hidden" value="true"><br>
+           <center> <input type="submit" value="Unsubscribe From All" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080 ; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;"></center>
+          </form></div>
+<script>
+    function validateForm() {
+   
+      return true;
+    }
+
+    function validateUnsubscribe() {
+      var checkbox = document.getElementById('unsubscribeCheckbox');
+      if (checkbox.checked) {
+        return true;
+      } else {
+        alert("Please select the checkbox before clicking on 'Unsubscribe From All' button.");
+        return false;
+      }
+    }
+  </script>
+%%[ELSEIF RequestParameter("submitted") == true AND NOT EMPTY(@SubscriberKey) AND RowCount(@subscriberRows) > 0 THEN]%%
+    %%[IF RequestParameter("unsub") == true then]%%
+      <title>Custom Preference Center</title>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+<style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+          width: 500px; 
+            margin: 0 auto; 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            text-align: left; 
+            font-size:15px;
+            font-family:Arial, Helvetica, sans-serif;
+         
+        }
+
+        h3 {
+            background-color: #D3D3D3;
+            padding: 5px;
+            margin: 0;
+            border-radius: 3px;
+        }
+
+        input[type="submit"] {
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #808080;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+        @media only screen and (max-width: 500px) {
+    .container {
+        width: 90%; /* Adjust as needed */
+        box-sizing: border-box;
+        padding: 10px; /* Adjust padding as needed */
+        margin: 0 auto; /* Center the container */
+    }
+}
+    </style>
+<div class="container">
+<form action="%%=RequestParameter('PAGEURL')=%%" method="post">
+<div>
+  <h3 style="background-color: #D3D3D3; padding: 5px; margin: 0;  border-radius: 3px;">Resubscribe</h3><br>
+        
+          You have unsubscribed from ALL publications from ABC To resubscribe, please click the "Resubscribe" button below.
+         <input name="submitted" type="hidden" value="true"><br>
+         <input name="sub" type="hidden" value="true"><br><br>
+  <center><input type="submit" value="Resubscribe" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080 ; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;"></center><br><br>
+  Please refresh the page after you click the "Resubscribe" button. </div>
+  </form></div>
+
+    %%[ELSE]%%
+        <!-- Display go back message -->
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+          width: 500px; 
+            margin: 0 auto; 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            text-align: left; 
+            font-size:15px;
+            font-family:Arial, Helvetica, sans-serif;
+         
+        }
+
+        h3 {
+            background-color: #D3D3D3;
+            padding: 5px;
+            margin: 0;
+            border-radius: 3px;
+        }
+
+        input[type="submit"] {
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #808080;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+       @media only screen and (max-width: 500px) {
+    .container {
+        width: 90%; /* Adjust as needed */
+        box-sizing: border-box;
+        padding: 10px; /* Adjust padding as needed */
+        margin: 0 auto; /* Center the container */
+    }
+}
+        </style>
+        <div class="container">
+            <h2>Your Preference Has Been Updated.</h2>
+            Go back to your profile.<br>
+            <form action="%%=RequestParameter('PAGEURL')=%%" method="post">
+                <br>
+                <center><input type="submit" value="Go Back" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;"></center>
+            </form>
+        </div>
+    %%[ENDIF]%%
+
+
+
+%%[ELSEIF RequestParameter("submitted") == true AND NOT EMPTY(@SubscriberKey) THEN]%%
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .container {
+          width: 500px; 
+            margin: 0 auto; 
+            border: 1px solid #ccc; 
+            padding: 20px; 
+            text-align: left; 
+            font-size:15px;
+            font-family:Arial, Helvetica, sans-serif;
+         
+        }
+
+        h3 {
+            background-color: #D3D3D3;
+            padding: 5px;
+            margin: 0;
+            border-radius: 3px;
+        }
+
+        input[type="submit"] {
+            display: block;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #808080;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+
+       @media only screen and (max-width: 500px) {
+    .container {
+        width: 90%; /* Adjust as needed */
+        box-sizing: border-box;
+        padding: 10px; /* Adjust padding as needed */
+        margin: 0 auto; /* Center the container */
+    }
+}
+    </style>
+<title>Custom Preference Center</title><br>
+<div class="container">
+   
+      <h2>Your Preference Has Been Updated.</h2>
+      
+        Go back to your profile.<br>
+        <form action="%%=RequestParameter('PAGEURL')=%%" method="post">
+          <br>
+          <center>  <input type="submit" value="Go Back" style="display: block; margin: 0 auto; padding: 10px; background-color: #808080 ; color: #fff; border: none; cursor: pointer; transition: background-color 0.3s;"></center></form>  </div> 
+
+%%[ENDIF]%%   
